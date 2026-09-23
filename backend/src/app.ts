@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import rideRoutes from "./routes/ride.routes";
 
 const app = express();
 
@@ -12,5 +13,8 @@ app.get("/api/health", (_req, res) => {
     service: "dhaka-tesla-pool-api",
   });
 });
+
+
+app.use("/api/rides", rideRoutes);
 
 export default app;
