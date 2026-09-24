@@ -1,9 +1,27 @@
 import { Router } from "express";
-import { createRideRequest } from "../controllers/ride.controller";
+import {
+  createRideRequest,
+  getMyRideRequests,
+  getMyRideRequest,
+} from "../controllers/ride.controller";
 import { authenticate } from "../middleware/auth.middleware";
 import { requireRole } from "../middleware/role.middleware";
 
 const router = Router();
+
+router.get(
+  "/",
+  authenticate,
+  requireRole("PASSENGER"),
+  getMyRideRequests
+);
+
+router.get(
+  "/:id",
+  authenticate,
+  requireRole("PASSENGER"),
+  getMyRideRequest
+);
 
 router.post(
   "/",
