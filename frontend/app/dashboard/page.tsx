@@ -31,9 +31,14 @@ export default function DashboardPage() {
   const [seats, setSeats] =
     useState(1);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
+
   const [loading, setLoading] =
     useState(false);
+
+  const [cancellingRideId, setCancellingRideId] =
+    useState<string | null>(null);
 
   const user = getUser();
 
@@ -53,9 +58,7 @@ export default function DashboardPage() {
 
   async function loadRides() {
     try {
-      const response = await api.get(
-        "/rides"
-      );
+      const response = await api.get("/rides");
 
       setRides(
         response.data.rides || []
@@ -73,6 +76,13 @@ export default function DashboardPage() {
   ) {
     event.preventDefault();
 
+    if (pickupLocation === destination) {
+      setError(
+        "Pickup and destination cannot be the same"
+      );
+      return;
+    }
+
     setError("");
     setLoading(true);
 
@@ -84,6 +94,7 @@ export default function DashboardPage() {
       });
 
       setSeats(1);
+
       await loadRides();
     } catch (error: any) {
       setError(
@@ -98,6 +109,9 @@ export default function DashboardPage() {
   async function cancelRide(
     rideId: string
   ) {
+    setError("");
+    setCancellingRideId(rideId);
+
     try {
       await api.patch(
         `/rides/${rideId}/cancel`
@@ -109,6 +123,8 @@ export default function DashboardPage() {
         error?.response?.data?.message ||
           "Unable to cancel ride"
       );
+    } finally {
+      setCancellingRideId(null);
     }
   }
 
@@ -122,6 +138,7 @@ export default function DashboardPage() {
       <header className="topbar">
         <div>
           <h1>Passenger Dashboard</h1>
+
           <p>
             Welcome, {user?.name}
           </p>
@@ -211,57 +228,65 @@ export default function DashboardPage() {
           <p>No rides yet.</p>
         ) : (
           <div className="ride-list">
-            {rides.map((ride) => (
-              <div
-                className="ride-item"
-                key={ride.id}
-              >
-                <div>
-                  <strong>
-                    {ride.pickupLocation}
-                    {" ? "}
-                    {ride.destination}
-                  </strong>
+            {rides.map((ride) => {
+              const canCancel =
+                ride.status === "REQUESTED" ||
+                ride.status === "MATCHED";
 
-                  <p>
-                    Seats: {ride.seats}
-                  </p>
+              return (
+                <div
+                  className="ride-item"
+                  key={ride.id}
+                >
+                  <div>
+                    <strong>
+                      {ride.pickupLocation}
+                      {" ? "}
+                      {ride.destination}
+                    </strong>
 
-                  <p>
-                    Estimated fare: ?
-                    {ride.estimatedFare}
-                  </p>
-
-                  {ride.finalFare !==
-                    null && (
                     <p>
-                      Final fare: ?
-                      {ride.finalFare}
+                      Seats: {ride.seats}
                     </p>
-                  )}
 
-                  <span className="status">
-                    {ride.status}
-                  </span>
-                </div>
+                    <p>
+                      Estimated fare: ?
+                      {ride.estimatedFare}
+                    </p>
 
-                {ride.status !==
-                  "COMPLETED" &&
-                  ride.status !==
-                    "CANCELLED" && (
+                    {ride.finalFare !==
+                      null && (
+                      <p>
+                        Final fare: ?
+                        {ride.finalFare}
+                      </p>
+                    )}
+
+                    <span className="status">
+                      {ride.status}
+                    </span>
+                  </div>
+
+                  {canCancel && (
                     <button
                       className="danger-button"
                       onClick={() =>
-                        cancelRide(
-                          ride.id
-                        )
+                        cancelRide(ride.id)
+                      }
+                      disabled={
+                        cancellingRideId ===
+                        ride.id
                       }
                     >
-                      Cancel
+                      {cancellingRideId ===
+                      ride.id
+                        ? "Cancelling..."
+                        : "Cancel Ride"}
                     </button>
                   )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
