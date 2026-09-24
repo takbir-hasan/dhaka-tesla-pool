@@ -40,21 +40,26 @@ export default function DashboardPage() {
   const [cancellingRideId, setCancellingRideId] =
     useState<string | null>(null);
 
-  const user = getUser();
+const [user, setUser] =
+  useState<ReturnType<typeof getUser>>(null);
 
-  useEffect(() => {
-    if (!user) {
-      router.push("/login");
-      return;
-    }
+ useEffect(() => {
+  const currentUser = getUser();
 
-    if (user.role !== "PASSENGER") {
-      router.push("/driver");
-      return;
-    }
+  if (!currentUser) {
+    router.push("/login");
+    return;
+  }
 
-    loadRides();
-  }, []);
+  setUser(currentUser);
+
+  if (currentUser.role !== "PASSENGER") {
+    router.push("/driver");
+    return;
+  }
+
+  loadRides();
+}, []);
 
   async function loadRides() {
     try {

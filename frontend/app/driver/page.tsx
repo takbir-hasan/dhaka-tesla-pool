@@ -55,15 +55,20 @@ export default function DriverPage() {
   const [busyPoolId, setBusyPoolId] =
     useState<string | null>(null);
 
-  const user = getUser();
+const [user, setUser] =
+  useState<ReturnType<typeof getUser>>(null);
 
   useEffect(() => {
-    if (!user) {
-      router.push("/login");
-      return;
-    }
+    const currentUser = getUser();
 
-    if (user.role !== "DRIVER") {
+  if (!currentUser) {
+    router.push("/login");
+    return;
+  }
+
+  setUser(currentUser);
+
+    if (currentUser.role !== "DRIVER") {
       router.push("/dashboard");
       return;
     }
