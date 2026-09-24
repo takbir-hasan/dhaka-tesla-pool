@@ -34,16 +34,19 @@ export type Vehicle = {
   isOnline: boolean;
 };
 
+export type PoolMember = {
+  id: string;
+  seats: number;
+  fare: number;
+  joinedAt?: string;
+  rideRequest: Ride;
+};
+
 export type Pool = {
   id: string;
   totalSeats: number;
   occupiedSeats: number;
   status: PoolStatus;
   vehicle: Vehicle;
-  members: Array<{
-    id: string;
-    seats: number;
-    fare: number;
-    rideRequest: Ride;
-  }>;
+  members: PoolMember[];
 };

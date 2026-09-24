@@ -14,7 +14,16 @@ import {
 import {
   Pool,
   Vehicle,
+  Ride,
 } from "../../types";
+
+type DriverRide = Ride & {
+  passenger?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+};
 
 export default function DriverPage() {
   const router = useRouter();
@@ -24,6 +33,9 @@ export default function DriverPage() {
 
   const [pools, setPools] =
     useState<Pool[]>([]);
+
+  const [requestedRides, setRequestedRides] =
+    useState<DriverRide[]>([]);
 
   const [vehicleName, setVehicleName] =
     useState("");
@@ -36,6 +48,12 @@ export default function DriverPage() {
 
   const [loading, setLoading] =
     useState(false);
+
+  const [busyRideId, setBusyRideId] =
+    useState<string | null>(null);
+
+  const [busyPoolId, setBusyPoolId] =
+    useState<string | null>(null);
 
   const user = getUser();
 
@@ -54,13 +72,17 @@ export default function DriverPage() {
   }, []);
 
   async function loadDriverData() {
+    setError("");
+
     try {
       const [
         vehicleResponse,
         poolsResponse,
+        ridesResponse,
       ] = await Promise.all([
         api.get("/drivers/vehicle"),
         api.get("/drivers/pools"),
+        api.get("/drivers/rides/requests"),
       ]);
 
       setVehicle(
@@ -69,7 +91,14 @@ export default function DriverPage() {
       );
 
       setPools(
-        poolsResponse.data.pools || []
+        poolsResponse.data.pools ||
+          []
+      );
+
+      setRequestedRides(
+        ridesResponse.data.rides ||
+          ridesResponse.data.rideRequests ||
+          []
       );
     } catch (error: any) {
       setError(
@@ -88,13 +117,14 @@ export default function DriverPage() {
     setLoading(true);
 
     try {
-      const response = await api.post(
-        "/drivers/vehicle",
-        {
-          name: vehicleName,
-          capacity: Number(capacity),
-        }
-      );
+      const response =
+        await api.post(
+          "/drivers/vehicle",
+          {
+            name: vehicleName,
+            capacity: Number(capacity),
+          }
+        );
 
       setVehicle(
         response.data.vehicle
@@ -111,8 +141,44 @@ export default function DriverPage() {
     }
   }
 
+  async function updateVehicle(
+    event: FormEvent
+  ) {
+    event.preventDefault();
+
+    if (!vehicle) return;
+
+    setError("");
+    setLoading(true);
+
+    try {
+      const response =
+        await api.patch(
+          "/drivers/vehicle",
+          {
+            name: vehicle.name,
+            capacity: vehicle.capacity,
+          }
+        );
+
+      setVehicle(
+        response.data.vehicle ||
+          vehicle
+      );
+    } catch (error: any) {
+      setError(
+        error?.response?.data?.message ||
+          "Unable to update vehicle"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function toggleOnline() {
     if (!vehicle) return;
+
+    setError("");
 
     try {
       const response =
@@ -130,7 +196,7 @@ export default function DriverPage() {
     } catch (error: any) {
       setError(
         error?.response?.data?.message ||
-          "Unable to update vehicle"
+          "Unable to update vehicle status"
       );
     }
   }
@@ -143,11 +209,17 @@ export default function DriverPage() {
       return;
     }
 
+    setError("");
+    setLoading(true);
+
     try {
-      await api.post("/drivers/pools", {
-        vehicleId: vehicle.id,
-        totalSeats: vehicle.capacity,
-      });
+      await api.post(
+        "/drivers/pools",
+        {
+          vehicleId: vehicle.id,
+          totalSeats: vehicle.capacity,
+        }
+      );
 
       await loadDriverData();
     } catch (error: any) {
@@ -155,6 +227,126 @@ export default function DriverPage() {
         error?.response?.data?.message ||
           "Unable to create pool"
       );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function autoMatch(
+    rideId: string
+  ) {
+    setError("");
+    setBusyRideId(rideId);
+
+    try {
+      await api.post(
+        `/drivers/rides/${rideId}/auto-match`
+      );
+
+      await loadDriverData();
+    } catch (error: any) {
+      setError(
+        error?.response?.data?.message ||
+          "Unable to match ride"
+      );
+    } finally {
+      setBusyRideId(null);
+    }
+  }
+
+  async function updateRideStatus(
+    rideId: string,
+    status: string
+  ) {
+    setError("");
+    setBusyRideId(rideId);
+
+    try {
+      await api.patch(
+        `/drivers/rides/${rideId}/status`,
+        {
+          status,
+        }
+      );
+
+      await loadDriverData();
+    } catch (error: any) {
+      setError(
+        error?.response?.data?.message ||
+          "Unable to update ride status"
+      );
+    } finally {
+      setBusyRideId(null);
+    }
+  }
+
+  async function addRideToPool(
+    poolId: string,
+    rideId: string
+  ) {
+    setError("");
+    setBusyPoolId(poolId);
+
+    try {
+      await api.post(
+        `/drivers/pools/${poolId}/members`,
+        {
+          rideRequestId: rideId,
+        }
+      );
+
+      await loadDriverData();
+    } catch (error: any) {
+      setError(
+        error?.response?.data?.message ||
+          "Unable to add ride to pool"
+      );
+    } finally {
+      setBusyPoolId(null);
+    }
+  }
+
+  async function completePool(
+    poolId: string
+  ) {
+    setError("");
+    setBusyPoolId(poolId);
+
+    try {
+      await api.patch(
+        `/drivers/pools/${poolId}/complete`
+      );
+
+      await loadDriverData();
+    } catch (error: any) {
+      setError(
+        error?.response?.data?.message ||
+          "Unable to complete pool"
+      );
+    } finally {
+      setBusyPoolId(null);
+    }
+  }
+
+  async function cancelPool(
+    poolId: string
+  ) {
+    setError("");
+    setBusyPoolId(poolId);
+
+    try {
+      await api.patch(
+        `/drivers/pools/${poolId}/cancel`
+      );
+
+      await loadDriverData();
+    } catch (error: any) {
+      setError(
+        error?.response?.data?.message ||
+          "Unable to cancel pool"
+      );
+    } finally {
+      setBusyPoolId(null);
     }
   }
 
@@ -168,6 +360,7 @@ export default function DriverPage() {
       <header className="topbar">
         <div>
           <h1>Driver Dashboard</h1>
+
           <p>
             Welcome, {user?.name}
           </p>
@@ -232,42 +425,148 @@ export default function DriverPage() {
         <section className="card">
           <h2>My Vehicle</h2>
 
-          <p>
-            <strong>
-              {vehicle.name}
-            </strong>
-          </p>
+          <form onSubmit={updateVehicle}>
+            <input
+              type="text"
+              value={vehicle.name}
+              onChange={(event) =>
+                setVehicle({
+                  ...vehicle,
+                  name: event.target.value,
+                })
+              }
+              required
+            />
 
-          <p>
-            Capacity:{" "}
-            {vehicle.capacity}
-          </p>
+            <input
+              type="number"
+              min="1"
+              value={vehicle.capacity}
+              onChange={(event) =>
+                setVehicle({
+                  ...vehicle,
+                  capacity: Number(
+                    event.target.value
+                  ),
+                })
+              }
+              required
+            />
+
+            <button
+              type="submit"
+              disabled={loading}
+            >
+              Update Vehicle
+            </button>
+          </form>
 
           <p>
             Status:{" "}
-            {vehicle.isOnline
-              ? "Online"
-              : "Offline"}
+            <strong>
+              {vehicle.isOnline
+                ? "Online"
+                : "Offline"}
+            </strong>
           </p>
 
-          <button
-            onClick={toggleOnline}
-          >
-            {vehicle.isOnline
-              ? "Go Offline"
-              : "Go Online"}
-          </button>
-
-          {vehicle.isOnline && (
+          <div className="button-row">
             <button
-              onClick={createPool}
-              className="secondary-button"
+              onClick={toggleOnline}
             >
-              Create Pool
+              {vehicle.isOnline
+                ? "Go Offline"
+                : "Go Online"}
             </button>
-          )}
+
+            {vehicle.isOnline && (
+              <button
+                className="secondary-button"
+                onClick={createPool}
+                disabled={loading}
+              >
+                Create Pool
+              </button>
+            )}
+          </div>
         </section>
       )}
+
+      <section className="card">
+        <div className="section-heading">
+          <div>
+            <h2>Ride Requests</h2>
+            <p>
+              Passenger requests available
+              to you.
+            </p>
+          </div>
+
+          <button
+            className="secondary-button"
+            onClick={loadDriverData}
+          >
+            Refresh
+          </button>
+        </div>
+
+        {requestedRides.length === 0 ? (
+          <p>
+            No pending ride requests.
+          </p>
+        ) : (
+          <div className="ride-list">
+            {requestedRides.map(
+              (ride) => (
+                <div
+                  className="ride-item"
+                  key={ride.id}
+                >
+                  <div>
+                    <strong>
+                      {ride.pickupLocation}
+                      {" ? "}
+                      {ride.destination}
+                    </strong>
+
+                    <p>
+                      Seats: {ride.seats}
+                    </p>
+
+                    <p>
+                      Estimated fare: ?
+                      {ride.estimatedFare}
+                    </p>
+
+                    <span className="status">
+                      {ride.status}
+                    </span>
+                  </div>
+
+                  <div className="button-column">
+                    <button
+                      onClick={() =>
+                        autoMatch(
+                          ride.id
+                        )
+                      }
+                      disabled={
+                        busyRideId ===
+                        ride.id
+                      }
+                    >
+                      {busyRideId ===
+                      ride.id
+                        ? "Matching..."
+                        : "Auto Match"}
+                    </button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        )}
+      </section>
 
       <section className="card">
         <h2>My Pools</h2>
@@ -280,7 +579,7 @@ export default function DriverPage() {
           <div className="ride-list">
             {pools.map((pool) => (
               <div
-                className="ride-item"
+                className="ride-item pool-item"
                 key={pool.id}
               >
                 <div>
@@ -295,9 +594,92 @@ export default function DriverPage() {
                     {pool.totalSeats}
                   </p>
 
-                  <span className="status">
+                  <p>
+                    Status:{" "}
                     {pool.status}
+                  </p>
+
+                  <span className="status">
+                    {pool.vehicle?.name ||
+                      "Vehicle"}
                   </span>
+                </div>
+
+                <div className="button-column">
+                  {pool.status ===
+                    "OPEN" && (
+                    <>
+                      {requestedRides.map(
+                        (ride) => (
+                          <button
+                            key={ride.id}
+                            className="secondary-button"
+                            onClick={() =>
+                              addRideToPool(
+                                pool.id,
+                                ride.id
+                              )
+                            }
+                            disabled={
+                              busyPoolId ===
+                              pool.id
+                            }
+                          >
+                            Add{" "}
+                            {ride.pickupLocation}
+                            {" ? "}
+                            {ride.destination}
+                          </button>
+                        )
+                      )}
+
+                      <button
+                        onClick={() =>
+                          completePool(
+                            pool.id
+                          )
+                        }
+                        disabled={
+                          busyPoolId ===
+                          pool.id
+                        }
+                      >
+                        Complete Pool
+                      </button>
+
+                      <button
+                        className="danger-button"
+                        onClick={() =>
+                          cancelPool(
+                            pool.id
+                          )
+                        }
+                        disabled={
+                          busyPoolId ===
+                          pool.id
+                        }
+                      >
+                        Cancel Pool
+                      </button>
+                    </>
+                  )}
+
+                  {pool.status ===
+                    "IN_PROGRESS" && (
+                    <button
+                      onClick={() =>
+                        completePool(
+                          pool.id
+                        )
+                      }
+                      disabled={
+                        busyPoolId ===
+                        pool.id
+                      }
+                    >
+                      Complete Pool
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
