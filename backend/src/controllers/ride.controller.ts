@@ -68,7 +68,7 @@ export async function getMyRideRequest(
 ) {
   try {
     const ride = await getMyRideById(
-      req.params.id,
+      String(req.params.id),
       req.user!.userId
     );
 
@@ -94,7 +94,7 @@ export async function cancelRideRequest(
 ) {
   try {
     const ride = await cancelRide(
-      req.params.id,
+      String(req.params.id),
       req.user!.userId
     );
 

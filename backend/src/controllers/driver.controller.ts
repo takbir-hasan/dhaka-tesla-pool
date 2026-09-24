@@ -10,6 +10,7 @@ import {
   getMyPoolById,
   getRequestedRides,
   addRideToPool,
+  findAndMatchRide,
   updateRideStatus,
   completePool,
   cancelPool,
@@ -37,9 +38,7 @@ export async function createDriverVehicle(
       capacity,
     });
 
-    return res.status(201).json({
-      vehicle,
-    });
+    return res.status(201).json({ vehicle });
   } catch (error) {
     return res.status(400).json({
       message:
@@ -63,9 +62,7 @@ export async function getDriverVehicle(
       });
     }
 
-    return res.status(200).json({
-      vehicle,
-    });
+    return res.status(200).json({ vehicle });
   } catch {
     return res.status(500).json({
       message: "Internal server error",
@@ -95,9 +92,7 @@ export async function updateDriverVehicle(
       capacity
     );
 
-    return res.status(200).json({
-      vehicle,
-    });
+    return res.status(200).json({ vehicle });
   } catch (error) {
     return res.status(400).json({
       message:
@@ -126,9 +121,7 @@ export async function updateDriverVehicleStatus(
       isOnline
     );
 
-    return res.status(200).json({
-      vehicle,
-    });
+    return res.status(200).json({ vehicle });
   } catch (error) {
     return res.status(400).json({
       message:
@@ -161,9 +154,7 @@ export async function createDriverPool(
       totalSeats,
     });
 
-    return res.status(201).json({
-      pool,
-    });
+    return res.status(201).json({ pool });
   } catch (error) {
     return res.status(400).json({
       message:
@@ -181,9 +172,7 @@ export async function getDriverPools(
   try {
     const pools = await getMyPools(req.user!.userId);
 
-    return res.status(200).json({
-      pools,
-    });
+    return res.status(200).json({ pools });
   } catch {
     return res.status(500).json({
       message: "Internal server error",
@@ -196,14 +185,14 @@ export async function getDriverPool(
   res: Response
 ) {
   try {
+    const poolId = String(req.params.id);
+
     const pool = await getMyPoolById(
-      req.params.id,
+      poolId,
       req.user!.userId
     );
 
-    return res.status(200).json({
-      pool,
-    });
+    return res.status(200).json({ pool });
   } catch (error) {
     if (
       error instanceof Error &&
@@ -227,9 +216,7 @@ export async function getDriverRequestedRides(
   try {
     const rides = await getRequestedRides();
 
-    return res.status(200).json({
-      rides,
-    });
+    return res.status(200).json({ rides });
   } catch {
     return res.status(500).json({
       message: "Internal server error",
@@ -242,6 +229,7 @@ export async function matchRideToPool(
   res: Response
 ) {
   try {
+    const poolId = String(req.params.id);
     const { rideRequestId } = req.body;
 
     if (typeof rideRequestId !== "string") {
@@ -251,7 +239,7 @@ export async function matchRideToPool(
     }
 
     const member = await addRideToPool(
-      req.params.id,
+      poolId,
       rideRequestId,
       req.user!.userId
     );
@@ -270,11 +258,35 @@ export async function matchRideToPool(
   }
 }
 
+export async function automaticallyMatchRide(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    const rideId = String(req.params.id);
+
+    const result = await findAndMatchRide(rideId);
+
+    return res.status(201).json({
+      message: "Ride matched automatically",
+      ...result,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unable to automatically match ride",
+    });
+  }
+}
+
 export async function updateDriverRideStatus(
   req: AuthenticatedRequest,
   res: Response
 ) {
   try {
+    const rideId = String(req.params.id);
     const { status } = req.body;
 
     const allowedStatuses = [
@@ -293,14 +305,15 @@ export async function updateDriverRideStatus(
     }
 
     const ride = await updateRideStatus(
-      req.params.id,
+      rideId,
       req.user!.userId,
-      status as "DRIVER_ARRIVED" | "STARTED" | "COMPLETED"
+      status as
+        | "DRIVER_ARRIVED"
+        | "STARTED"
+        | "COMPLETED"
     );
 
-    return res.status(200).json({
-      ride,
-    });
+    return res.status(200).json({ ride });
   } catch (error) {
     return res.status(400).json({
       message:
@@ -316,8 +329,10 @@ export async function completeDriverPool(
   res: Response
 ) {
   try {
+    const poolId = String(req.params.id);
+
     const pool = await completePool(
-      req.params.id,
+      poolId,
       req.user!.userId
     );
 
@@ -340,8 +355,10 @@ export async function cancelDriverPool(
   res: Response
 ) {
   try {
+    const poolId = String(req.params.id);
+
     const pool = await cancelPool(
-      req.params.id,
+      poolId,
       req.user!.userId
     );
 
