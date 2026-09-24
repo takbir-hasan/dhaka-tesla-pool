@@ -9,6 +9,7 @@ import {
   getDriverPool,
   getDriverRequestedRides,
   matchRideToPool,
+  automaticallyMatchRide,
   updateDriverRideStatus,
   completeDriverPool,
   cancelDriverPool,
@@ -49,6 +50,16 @@ router.get(
 );
 
 router.post(
+  "/rides/:id/auto-match",
+  automaticallyMatchRide
+);
+
+router.patch(
+  "/rides/:id/status",
+  updateDriverRideStatus
+);
+
+router.post(
   "/pools",
   createDriverPool
 );
@@ -76,11 +87,6 @@ router.patch(
 router.patch(
   "/pools/:id/cancel",
   cancelDriverPool
-);
-
-router.patch(
-  "/rides/:id/status",
-  updateDriverRideStatus
 );
 
 export default router;
