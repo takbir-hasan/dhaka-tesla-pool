@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import rideRoutes from "./routes/ride.routes";
 import authRoutes from "./routes/auth.routes";
+import driverRoutes from "./routes/driver.routes";
 
 const app = express();
 
@@ -16,7 +17,8 @@ app.get("/api/health", (_req, res) => {
 });
 
 
-app.use("/api/rides", rideRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/rides", rideRoutes);
+app.use("/api/driver", driverRoutes);
 
 export default app;
