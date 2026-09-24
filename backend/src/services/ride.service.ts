@@ -1,6 +1,7 @@
 import prisma from "../config/prisma";
-import { estimateDistance } from "../utils/distance";
-import { calculateFare } from "../utils/fare";
+import {
+  calculateEstimatedFare,
+} from "../utils/fare";
 
 type CreateRideInput = {
   passengerId: string;
@@ -9,19 +10,26 @@ type CreateRideInput = {
   seats: number;
 };
 
-export async function createRide(input: CreateRideInput) {
-  if (input.seats <= 0) {
-    throw new Error("Seats must be greater than zero");
+export async function createRide(
+  input: CreateRideInput
+) {
+  if (
+    !Number.isInteger(input.seats) ||
+    input.seats <= 0
+  ) {
+    throw new Error(
+      "Seats must be a positive integer"
+    );
   }
 
-  const distanceKm = estimateDistance(
-    input.pickupLocation,
-    input.destination
-  );
+  const estimatedFare =
+    calculateEstimatedFare(
+      input.pickupLocation,
+      input.destination,
+      input.seats
+    );
 
-  const estimatedFare = calculateFare(distanceKm);
-
-  const ride = await prisma.rideRequest.create({
+  return prisma.rideRequest.create({
     data: {
       passengerId: input.passengerId,
       pickupLocation: input.pickupLocation,
@@ -31,17 +39,32 @@ export async function createRide(input: CreateRideInput) {
       status: "REQUESTED",
     },
   });
-
-  return {
-    ride,
-    distanceKm,
-  };
 }
 
-export async function getMyRides(passengerId: string) {
+export async function getMyRides(
+  passengerId: string
+) {
   return prisma.rideRequest.findMany({
     where: {
       passengerId,
+    },
+    include: {
+      poolMember: {
+        include: {
+          pool: {
+            include: {
+              vehicle: true,
+              driver: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
     orderBy: {
       createdAt: "desc",
@@ -49,7 +72,7 @@ export async function getMyRides(passengerId: string) {
   });
 }
 
-export async function getMyRideById(
+export async function getRideById(
   rideId: string,
   passengerId: string
 ) {
@@ -57,6 +80,29 @@ export async function getMyRideById(
     where: {
       id: rideId,
       passengerId,
+    },
+    include: {
+      poolMember: {
+        include: {
+          pool: {
+            include: {
+              vehicle: true,
+              driver: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      statusHistory: {
+        orderBy: {
+          createdAt: "asc",
+        },
+      },
     },
   });
 
@@ -82,30 +128,94 @@ export async function cancelRide(
     throw new Error("Ride not found");
   }
 
-  const cancellableStatuses = ["REQUESTED", "MATCHED"];
-
-  if (!cancellableStatuses.includes(ride.status)) {
+  if (
+    ride.status === "COMPLETED"
+  ) {
     throw new Error(
-      `Ride cannot be cancelled from ${ride.status} status`
+      "Completed ride cannot be cancelled"
     );
   }
 
-  const updatedRide = await prisma.rideRequest.update({
-    where: {
-      id: ride.id,
-    },
-    data: {
-      status: "CANCELLED",
-    },
-  });
+  if (
+    ride.status === "CANCELLED"
+  ) {
+    throw new Error(
+      "Ride is already cancelled"
+    );
+  }
 
-  await prisma.rideStatusHistory.create({
-    data: {
-      rideRequestId: ride.id,
-      fromStatus: ride.status,
-      toStatus: "CANCELLED",
-    },
-  });
+  if (
+    ride.status === "STARTED"
+  ) {
+    throw new Error(
+      "Started ride cannot be cancelled"
+    );
+  }
 
-  return updatedRide;
+  return prisma.$transaction(
+    async (tx) => {
+      const updatedRide =
+        await tx.rideRequest.update({
+          where: {
+            id: ride.id,
+          },
+          data: {
+            status: "CANCELLED",
+          },
+        });
+
+      await tx.rideStatusHistory.create({
+        data: {
+          rideRequestId: ride.id,
+          fromStatus: ride.status,
+          toStatus: "CANCELLED",
+        },
+      });
+
+      /*
+       * If the ride had already been matched,
+       * release its occupied seats from the pool.
+       */
+      const member =
+        await tx.poolMember.findUnique({
+          where: {
+            rideRequestId: ride.id,
+          },
+        });
+
+      if (member) {
+        const pool =
+          await tx.pool.findUnique({
+            where: {
+              id: member.poolId,
+            },
+          });
+
+        if (pool) {
+          await tx.pool.update({
+            where: {
+              id: pool.id,
+            },
+            data: {
+              occupiedSeats: {
+                decrement: member.seats,
+              },
+              status:
+                pool.status === "IN_PROGRESS"
+                  ? "OPEN"
+                  : pool.status,
+            },
+          });
+        }
+
+        await tx.poolMember.delete({
+          where: {
+            id: member.id,
+          },
+        });
+      }
+
+      return updatedRide;
+    }
+  );
 }

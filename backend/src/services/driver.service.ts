@@ -1,4 +1,7 @@
 import prisma from "../config/prisma";
+import {
+  calculatePoolFare,
+} from "../utils/fare";
 
 type CreateVehicleInput = {
   driverId: string;
@@ -12,19 +15,26 @@ type CreatePoolInput = {
   totalSeats: number;
 };
 
-export async function createVehicle(input: CreateVehicleInput) {
+export async function createVehicle(
+  input: CreateVehicleInput
+) {
   if (input.capacity <= 0) {
-    throw new Error("Vehicle capacity must be greater than zero");
+    throw new Error(
+      "Vehicle capacity must be greater than zero"
+    );
   }
 
-  const existingVehicle = await prisma.vehicle.findUnique({
-    where: {
-      driverId: input.driverId,
-    },
-  });
+  const existingVehicle =
+    await prisma.vehicle.findUnique({
+      where: {
+        driverId: input.driverId,
+      },
+    });
 
   if (existingVehicle) {
-    throw new Error("Driver already has a vehicle");
+    throw new Error(
+      "Driver already has a vehicle"
+    );
   }
 
   return prisma.vehicle.create({
@@ -36,7 +46,9 @@ export async function createVehicle(input: CreateVehicleInput) {
   });
 }
 
-export async function getMyVehicle(driverId: string) {
+export async function getMyVehicle(
+  driverId: string
+) {
   return prisma.vehicle.findUnique({
     where: {
       driverId,
@@ -49,29 +61,36 @@ export async function updateVehicle(
   name: string,
   capacity: number
 ) {
-  const vehicle = await prisma.vehicle.findUnique({
-    where: {
-      driverId,
-    },
-  });
+  const vehicle =
+    await prisma.vehicle.findUnique({
+      where: {
+        driverId,
+      },
+    });
 
   if (!vehicle) {
     throw new Error("Vehicle not found");
   }
 
   if (capacity <= 0) {
-    throw new Error("Vehicle capacity must be greater than zero");
+    throw new Error(
+      "Vehicle capacity must be greater than zero"
+    );
   }
 
   if (capacity < vehicle.capacity) {
-    const activePool = await prisma.pool.findFirst({
-      where: {
-        vehicleId: vehicle.id,
-        status: "OPEN",
-      },
-    });
+    const activePool =
+      await prisma.pool.findFirst({
+        where: {
+          vehicleId: vehicle.id,
+          status: "OPEN",
+        },
+      });
 
-    if (activePool && activePool.occupiedSeats > capacity) {
+    if (
+      activePool &&
+      activePool.occupiedSeats > capacity
+    ) {
       throw new Error(
         "Vehicle capacity cannot be lower than occupied seats"
       );
@@ -93,11 +112,12 @@ export async function setVehicleOnline(
   driverId: string,
   isOnline: boolean
 ) {
-  const vehicle = await prisma.vehicle.findUnique({
-    where: {
-      driverId,
-    },
-  });
+  const vehicle =
+    await prisma.vehicle.findUnique({
+      where: {
+        driverId,
+      },
+    });
 
   if (!vehicle) {
     throw new Error("Vehicle not found");
@@ -113,41 +133,57 @@ export async function setVehicleOnline(
   });
 }
 
-export async function createPool(input: CreatePoolInput) {
-  const vehicle = await prisma.vehicle.findFirst({
-    where: {
-      id: input.vehicleId,
-      driverId: input.driverId,
-    },
-  });
+export async function createPool(
+  input: CreatePoolInput
+) {
+  const vehicle =
+    await prisma.vehicle.findFirst({
+      where: {
+        id: input.vehicleId,
+        driverId: input.driverId,
+      },
+    });
 
   if (!vehicle) {
-    throw new Error("Vehicle not found or does not belong to driver");
+    throw new Error(
+      "Vehicle not found or does not belong to driver"
+    );
   }
 
   if (!vehicle.isOnline) {
-    throw new Error("Vehicle must be online before creating a pool");
+    throw new Error(
+      "Vehicle must be online before creating a pool"
+    );
   }
 
   if (input.totalSeats <= 0) {
-    throw new Error("Pool seats must be greater than zero");
+    throw new Error(
+      "Pool seats must be greater than zero"
+    );
   }
 
-  if (input.totalSeats > vehicle.capacity) {
-    throw new Error("Pool seats cannot exceed vehicle capacity");
+  if (
+    input.totalSeats > vehicle.capacity
+  ) {
+    throw new Error(
+      "Pool seats cannot exceed vehicle capacity"
+    );
   }
 
-  const existingPool = await prisma.pool.findFirst({
-    where: {
-      driverId: input.driverId,
-      status: {
-        in: ["OPEN", "IN_PROGRESS"],
+  const existingPool =
+    await prisma.pool.findFirst({
+      where: {
+        driverId: input.driverId,
+        status: {
+          in: ["OPEN", "IN_PROGRESS"],
+        },
       },
-    },
-  });
+    });
 
   if (existingPool) {
-    throw new Error("Driver already has an active pool");
+    throw new Error(
+      "Driver already has an active pool"
+    );
   }
 
   return prisma.pool.create({
@@ -161,7 +197,9 @@ export async function createPool(input: CreatePoolInput) {
   });
 }
 
-export async function getMyPools(driverId: string) {
+export async function getMyPools(
+  driverId: string
+) {
   return prisma.pool.findMany({
     where: {
       driverId,
@@ -184,20 +222,21 @@ export async function getMyPoolById(
   poolId: string,
   driverId: string
 ) {
-  const pool = await prisma.pool.findFirst({
-    where: {
-      id: poolId,
-      driverId,
-    },
-    include: {
-      vehicle: true,
-      members: {
-        include: {
-          rideRequest: true,
+  const pool =
+    await prisma.pool.findFirst({
+      where: {
+        id: poolId,
+        driverId,
+      },
+      include: {
+        vehicle: true,
+        members: {
+          include: {
+            rideRequest: true,
+          },
         },
       },
-    },
-  });
+    });
 
   if (!pool) {
     throw new Error("Pool not found");
@@ -227,224 +266,390 @@ export async function getRequestedRides() {
   });
 }
 
+async function createPoolMember(
+  tx: any,
+  pool: any,
+  ride: any
+) {
+  const pooledFare =
+    calculatePoolFare(
+      ride.estimatedFare,
+      pool.occupiedSeats + ride.seats
+    );
+
+  const member =
+    await tx.poolMember.create({
+      data: {
+        poolId: pool.id,
+        rideRequestId: ride.id,
+        seats: ride.seats,
+        fare: pooledFare,
+      },
+    });
+
+  await tx.pool.update({
+    where: {
+      id: pool.id,
+    },
+    data: {
+      occupiedSeats: {
+        increment: ride.seats,
+      },
+      status:
+        pool.occupiedSeats +
+          ride.seats >=
+        pool.totalSeats
+          ? "IN_PROGRESS"
+          : "OPEN",
+    },
+  });
+
+  await tx.rideRequest.update({
+    where: {
+      id: ride.id,
+    },
+    data: {
+      status: "MATCHED",
+      finalFare: pooledFare,
+    },
+  });
+
+  await tx.rideStatusHistory.create({
+    data: {
+      rideRequestId: ride.id,
+      fromStatus: "REQUESTED",
+      toStatus: "MATCHED",
+    },
+  });
+
+  return member;
+}
+
 export async function addRideToPool(
   poolId: string,
   rideRequestId: string,
   driverId: string
 ) {
-  const pool = await prisma.pool.findFirst({
-    where: {
-      id: poolId,
-      driverId,
-    },
-  });
+  const pool =
+    await prisma.pool.findFirst({
+      where: {
+        id: poolId,
+        driverId,
+      },
+    });
 
   if (!pool) {
     throw new Error("Pool not found");
   }
 
   if (pool.status !== "OPEN") {
-    throw new Error("Only an open pool can accept rides");
+    throw new Error(
+      "Only an open pool can accept rides"
+    );
   }
 
-  const ride = await prisma.rideRequest.findUnique({
-    where: {
-      id: rideRequestId,
-    },
-  });
+  const ride =
+    await prisma.rideRequest.findUnique({
+      where: {
+        id: rideRequestId,
+      },
+    });
 
   if (!ride) {
-    throw new Error("Ride request not found");
+    throw new Error(
+      "Ride request not found"
+    );
   }
 
   if (ride.status !== "REQUESTED") {
-    throw new Error("Ride is no longer available for matching");
+    throw new Error(
+      "Ride is no longer available for matching"
+    );
   }
 
-  if (ride.seats <= 0) {
-    throw new Error("Invalid ride seat count");
-  }
-
-  const existingMember = await prisma.poolMember.findUnique({
-    where: {
-      rideRequestId,
-    },
-  });
+  const existingMember =
+    await prisma.poolMember.findUnique({
+      where: {
+        rideRequestId,
+      },
+    });
 
   if (existingMember) {
-    throw new Error("Ride is already assigned to a pool");
+    throw new Error(
+      "Ride is already assigned to a pool"
+    );
   }
 
-  const availableSeats = pool.totalSeats - pool.occupiedSeats;
+  const availableSeats =
+    pool.totalSeats -
+    pool.occupiedSeats;
 
   if (ride.seats > availableSeats) {
-    throw new Error("Not enough seats available in this pool");
+    throw new Error(
+      "Not enough seats available in this pool"
+    );
   }
 
-  return prisma.$transaction(async (tx) => {
-    const member = await tx.poolMember.create({
-      data: {
-        poolId: pool.id,
-        rideRequestId: ride.id,
-        seats: ride.seats,
-        fare: ride.finalFare ?? ride.estimatedFare,
-      },
-    });
-
-    await tx.pool.update({
-      where: {
-        id: pool.id,
-      },
-      data: {
-        occupiedSeats: {
-          increment: ride.seats,
-        },
-        status:
-          pool.occupiedSeats + ride.seats >= pool.totalSeats
-            ? "IN_PROGRESS"
-            : "OPEN",
-      },
-    });
-
-    await tx.rideRequest.update({
-      where: {
-        id: ride.id,
-      },
-      data: {
-        status: "MATCHED",
-      },
-    });
-
-    await tx.rideStatusHistory.create({
-      data: {
-        rideRequestId: ride.id,
-        fromStatus: "REQUESTED",
-        toStatus: "MATCHED",
-      },
-    });
-
-    return member;
-  });
+  return prisma.$transaction(
+    async (tx) => {
+      return createPoolMember(
+        tx,
+        pool,
+        ride
+      );
+    }
+  );
 }
 
-const allowedStatusTransitions: Record<string, string[]> = {
-  MATCHED: ["DRIVER_ARRIVED", "CANCELLED"],
-  DRIVER_ARRIVED: ["STARTED", "CANCELLED"],
-  STARTED: ["COMPLETED"],
-};
+export async function findAndMatchRide(
+  rideRequestId: string
+) {
+  const ride =
+    await prisma.rideRequest.findUnique({
+      where: {
+        id: rideRequestId,
+      },
+      include: {
+        poolMember: true,
+      },
+    });
+
+  if (!ride) {
+    throw new Error(
+      "Ride request not found"
+    );
+  }
+
+  if (ride.status !== "REQUESTED") {
+    throw new Error(
+      "Ride is no longer available for matching"
+    );
+  }
+
+  if (ride.poolMember) {
+    throw new Error(
+      "Ride is already assigned to a pool"
+    );
+  }
+
+  const pools =
+    await prisma.pool.findMany({
+      where: {
+        status: "OPEN",
+        vehicle: {
+          isOnline: true,
+        },
+      },
+      include: {
+        vehicle: true,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+  const suitablePool =
+    pools.find((pool) => {
+      const availableSeats =
+        pool.totalSeats -
+        pool.occupiedSeats;
+
+      return ride.seats <= availableSeats;
+    });
+
+  if (!suitablePool) {
+    throw new Error(
+      "No suitable pool is currently available"
+    );
+  }
+
+  return prisma.$transaction(
+    async (tx) => {
+      const currentRide =
+        await tx.rideRequest.findUnique({
+          where: {
+            id: rideRequestId,
+          },
+          include: {
+            poolMember: true,
+          },
+        });
+
+      if (!currentRide) {
+        throw new Error(
+          "Ride request not found"
+        );
+      }
+
+      if (
+        currentRide.status !==
+          "REQUESTED" ||
+        currentRide.poolMember
+      ) {
+        throw new Error(
+          "Ride is no longer available for matching"
+        );
+      }
+
+      const currentPool =
+        await tx.pool.findUnique({
+          where: {
+            id: suitablePool.id,
+          },
+        });
+
+      if (
+        !currentPool ||
+        currentPool.status !== "OPEN"
+      ) {
+        throw new Error(
+          "Selected pool is no longer available"
+        );
+      }
+
+      const availableSeats =
+        currentPool.totalSeats -
+        currentPool.occupiedSeats;
+
+      if (
+        currentRide.seats >
+        availableSeats
+      ) {
+        throw new Error(
+          "Not enough seats available in the pool"
+        );
+      }
+
+      const member =
+        await createPoolMember(
+          tx,
+          currentPool,
+          currentRide
+        );
+
+      const updatedRide =
+        await tx.rideRequest.findUnique({
+          where: {
+            id: currentRide.id,
+          },
+        });
+
+      return {
+        ride: updatedRide,
+        pool: currentPool,
+        member,
+      };
+    }
+  );
+}
+
+const allowedStatusTransitions:
+  Record<string, string[]> = {
+    MATCHED: [
+      "DRIVER_ARRIVED",
+      "CANCELLED",
+    ],
+    DRIVER_ARRIVED: [
+      "STARTED",
+      "CANCELLED",
+    ],
+    STARTED: [
+      "COMPLETED",
+    ],
+  };
 
 export async function updateRideStatus(
   rideRequestId: string,
   driverId: string,
-  newStatus: "DRIVER_ARRIVED" | "STARTED" | "COMPLETED"
+  newStatus:
+    | "DRIVER_ARRIVED"
+    | "STARTED"
+    | "COMPLETED"
 ) {
-  const ride = await prisma.rideRequest.findFirst({
-    where: {
-      id: rideRequestId,
-      poolMember: {
-        pool: {
-          driverId,
+  const ride =
+    await prisma.rideRequest.findFirst({
+      where: {
+        id: rideRequestId,
+        poolMember: {
+          pool: {
+            driverId,
+          },
         },
       },
-    },
-  });
+    });
 
   if (!ride) {
-    throw new Error("Ride not found or not assigned to this driver");
+    throw new Error(
+      "Ride not found or not assigned to this driver"
+    );
   }
 
   const allowedNextStatuses =
-    allowedStatusTransitions[ride.status] ?? [];
+    allowedStatusTransitions[
+      ride.status
+    ] ?? [];
 
-  if (!allowedNextStatuses.includes(newStatus)) {
+  if (
+    !allowedNextStatuses.includes(
+      newStatus
+    )
+  ) {
     throw new Error(
       `Cannot change ride status from ${ride.status} to ${newStatus}`
     );
   }
 
-  return prisma.$transaction(async (tx) => {
-    const updatedRide = await tx.rideRequest.update({
-      where: {
-        id: ride.id,
-      },
-      data: {
-        status: newStatus,
-      },
-    });
-
-    await tx.rideStatusHistory.create({
-      data: {
-        rideRequestId: ride.id,
-        fromStatus: ride.status,
-        toStatus: newStatus,
-      },
-    });
-
-    if (newStatus === "COMPLETED") {
-      const member = await tx.poolMember.findUnique({
-        where: {
-          rideRequestId: ride.id,
-        },
-      });
-
-      if (member) {
-        const pool = await tx.pool.findUnique({
+  return prisma.$transaction(
+    async (tx) => {
+      const updatedRide =
+        await tx.rideRequest.update({
           where: {
-            id: member.poolId,
+            id: ride.id,
+          },
+          data: {
+            status: newStatus,
           },
         });
 
-        if (pool) {
-          const remainingMembers = await tx.poolMember.count({
-            where: {
-              poolId: pool.id,
-              rideRequest: {
-                status: {
-                  not: "COMPLETED",
-                },
-              },
-            },
-          });
+      await tx.rideStatusHistory.create({
+        data: {
+          rideRequestId: ride.id,
+          fromStatus: ride.status,
+          toStatus: newStatus,
+        },
+      });
 
-          if (remainingMembers === 0) {
-            await tx.pool.update({
-              where: {
-                id: pool.id,
-              },
-              data: {
-                status: "COMPLETED",
-              },
-            });
-          }
-        }
-      }
+      return updatedRide;
     }
-
-    return updatedRide;
-  });
+  );
 }
 
 export async function completePool(
   poolId: string,
   driverId: string
 ) {
-  const pool = await prisma.pool.findFirst({
-    where: {
-      id: poolId,
-      driverId,
-    },
-  });
+  const pool =
+    await prisma.pool.findFirst({
+      where: {
+        id: poolId,
+        driverId,
+      },
+    });
 
   if (!pool) {
     throw new Error("Pool not found");
   }
 
   if (pool.status === "COMPLETED") {
-    throw new Error("Pool is already completed");
+    throw new Error(
+      "Pool is already completed"
+    );
   }
 
   if (pool.status === "CANCELLED") {
-    throw new Error("Cancelled pool cannot be completed");
+    throw new Error(
+      "Cancelled pool cannot be completed"
+    );
   }
 
   return prisma.pool.update({
@@ -461,60 +666,71 @@ export async function cancelPool(
   poolId: string,
   driverId: string
 ) {
-  const pool = await prisma.pool.findFirst({
-    where: {
-      id: poolId,
-      driverId,
-    },
-    include: {
-      members: {
-        include: {
-          rideRequest: true,
+  const pool =
+    await prisma.pool.findFirst({
+      where: {
+        id: poolId,
+        driverId,
+      },
+      include: {
+        members: {
+          include: {
+            rideRequest: true,
+          },
         },
       },
-    },
-  });
+    });
 
   if (!pool) {
     throw new Error("Pool not found");
   }
 
   if (pool.status === "COMPLETED") {
-    throw new Error("Completed pool cannot be cancelled");
+    throw new Error(
+      "Completed pool cannot be cancelled"
+    );
   }
 
-  return prisma.$transaction(async (tx) => {
-    for (const member of pool.members) {
-      if (
-        member.rideRequest.status !== "COMPLETED" &&
-        member.rideRequest.status !== "CANCELLED"
+  return prisma.$transaction(
+    async (tx) => {
+      for (
+        const member of pool.members
       ) {
-        await tx.rideRequest.update({
-          where: {
-            id: member.rideRequest.id,
-          },
-          data: {
-            status: "CANCELLED",
-          },
-        });
+        if (
+          member.rideRequest.status !==
+            "COMPLETED" &&
+          member.rideRequest.status !==
+            "CANCELLED"
+        ) {
+          await tx.rideRequest.update({
+            where: {
+              id: member.rideRequest.id,
+            },
+            data: {
+              status: "CANCELLED",
+            },
+          });
 
-        await tx.rideStatusHistory.create({
-          data: {
-            rideRequestId: member.rideRequest.id,
-            fromStatus: member.rideRequest.status,
-            toStatus: "CANCELLED",
-          },
-        });
+          await tx.rideStatusHistory.create({
+            data: {
+              rideRequestId:
+                member.rideRequest.id,
+              fromStatus:
+                member.rideRequest.status,
+              toStatus: "CANCELLED",
+            },
+          });
+        }
       }
-    }
 
-    return tx.pool.update({
-      where: {
-        id: pool.id,
-      },
-      data: {
-        status: "CANCELLED",
-      },
-    });
-  });
+      return tx.pool.update({
+        where: {
+          id: pool.id,
+        },
+        data: {
+          status: "CANCELLED",
+        },
+      });
+    }
+  );
 }

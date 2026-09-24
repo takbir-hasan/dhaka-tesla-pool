@@ -3,7 +3,7 @@ import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import {
   createRide,
   getMyRides,
-  getMyRideById,
+  getRideById,
   cancelRide,
 } from "../services/ride.service";
 
@@ -67,7 +67,7 @@ export async function getMyRideRequest(
   res: Response
 ) {
   try {
-    const ride = await getMyRideById(
+    const ride = await getRideById(
       String(req.params.id),
       req.user!.userId
     );
