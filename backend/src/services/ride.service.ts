@@ -41,6 +41,18 @@ export async function createRide(
   });
 }
 
+export function estimateRideFare(
+  pickupLocation: string,
+  destination: string,
+  seats: number
+) {
+  return calculateEstimatedFare(
+    pickupLocation,
+    destination,
+    seats
+  );
+}
+
 export async function getMyRides(
   passengerId: string
 ) {
@@ -141,6 +153,14 @@ export async function cancelRide(
   ) {
     throw new Error(
       "Ride is already cancelled"
+    );
+  }
+
+  if (
+    ride.status === "MATCHED"
+  ) {
+    throw new Error(
+      "Matched ride cannot be cancelled"
     );
   }
 

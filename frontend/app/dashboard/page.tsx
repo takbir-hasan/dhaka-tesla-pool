@@ -31,6 +31,12 @@ export default function DashboardPage() {
   const [seats, setSeats] =
     useState(1);
 
+  const [estimatedFare, setEstimatedFare] =
+    useState<number | null>(null);
+
+  const [fareLoading, setFareLoading] =
+    useState(false);
+
   const [error, setError] =
     useState("");
 
@@ -76,6 +82,35 @@ const [user, setUser] =
     }
   }
 
+  useEffect(() => {
+    if (pickupLocation === destination || seats < 1) {
+      setEstimatedFare(null);
+      return;
+    }
+
+    const estimateFare = async () => {
+      setFareLoading(true);
+
+      try {
+        const response = await api.get("/rides/estimate", {
+          params: {
+            pickupLocation,
+            destination,
+            seats: Number(seats),
+          },
+        });
+
+        setEstimatedFare(response.data.fare);
+      } catch {
+        setEstimatedFare(null);
+      } finally {
+        setFareLoading(false);
+      }
+    };
+
+    estimateFare();
+  }, [pickupLocation, destination, seats]);
+
   async function createRide(
     event: FormEvent
   ) {
@@ -85,6 +120,19 @@ const [user, setUser] =
       setError(
         "Pickup and destination cannot be the same"
       );
+      return;
+    }
+
+    if (estimatedFare === null) {
+      setError("Route fare is not available yet. Please try again.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Estimated fare: ৳${estimatedFare}. Do you want to request this ride?`
+    );
+
+    if (!confirmed) {
       return;
     }
 
@@ -204,9 +252,9 @@ const [user, setUser] =
           </select>
 
           <input
-            type="number"
-            min="1"
-            max="6"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={seats}
             onChange={(event) =>
               setSeats(
@@ -215,9 +263,17 @@ const [user, setUser] =
             }
           />
 
+          <p className="fare-preview">
+            {fareLoading
+              ? "Calculating fare..."
+              : estimatedFare === null
+                ? "Select a different pickup and destination"
+                : `Estimated fare: ৳${estimatedFare}`}
+          </p>
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || fareLoading || estimatedFare === null}
           >
             {loading
               ? "Requesting..."
@@ -235,8 +291,7 @@ const [user, setUser] =
           <div className="ride-list">
             {rides.map((ride) => {
               const canCancel =
-                ride.status === "REQUESTED" ||
-                ride.status === "MATCHED";
+                ride.status === "REQUESTED";
 
               return (
                 <div
@@ -246,7 +301,7 @@ const [user, setUser] =
                   <div>
                     <strong>
                       {ride.pickupLocation}
-                      {" ? "}
+                      {" -> "}
                       {ride.destination}
                     </strong>
 
@@ -255,14 +310,14 @@ const [user, setUser] =
                     </p>
 
                     <p>
-                      Estimated fare: ?
+                      Estimated fare: ৳
                       {ride.estimatedFare}
                     </p>
 
                     {ride.finalFare !==
                       null && (
                       <p>
-                        Final fare: ?
+                        Final fare: ৳
                         {ride.finalFare}
                       </p>
                     )}

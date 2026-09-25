@@ -2,10 +2,50 @@ import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import {
   createRide,
+  estimateRideFare,
   getMyRides,
   getRideById,
   cancelRide,
 } from "../services/ride.service";
+
+export async function estimateRideRequest(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    const { pickupLocation, destination, seats } = req.query;
+
+    if (
+      typeof pickupLocation !== "string" ||
+      typeof destination !== "string" ||
+      typeof seats !== "string"
+    ) {
+      return res.status(400).json({
+        message: "pickupLocation, destination and seats are required",
+      });
+    }
+
+    const fare = estimateRideFare(
+      pickupLocation,
+      destination,
+      Number(seats)
+    );
+
+    return res.status(200).json({
+      fare,
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+}
 
 export async function createRideRequest(
   req: AuthenticatedRequest,
@@ -110,7 +150,10 @@ export async function cancelRideRequest(
         });
       }
 
-      if (error.message.startsWith("Ride cannot be cancelled")) {
+      if (
+        error.message === "Matched ride cannot be cancelled" ||
+        error.message.startsWith("Ride cannot be cancelled")
+      ) {
         return res.status(400).json({
           message: error.message,
         });

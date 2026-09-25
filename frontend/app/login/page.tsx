@@ -1,13 +1,25 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "../../lib/api";
-import { saveAuth } from "../../lib/auth";
+import { getUser, saveAuth } from "../../lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
+
+  useEffect(() => {
+    const user = getUser();
+
+    if (user) {
+      router.replace(
+        user.role === "DRIVER"
+          ? "/driver"
+          : "/dashboard"
+      );
+    }
+  }, [router]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] =

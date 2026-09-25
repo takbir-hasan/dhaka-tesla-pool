@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  estimateRideRequest,
   createRideRequest,
   getMyRideRequests,
   getMyRideRequest,
@@ -15,6 +16,13 @@ router.get(
   authenticate,
   requireRole("PASSENGER"),
   getMyRideRequests
+);
+
+router.get(
+  "/estimate",
+  authenticate,
+  requireRole("PASSENGER"),
+  estimateRideRequest
 );
 
 router.get(

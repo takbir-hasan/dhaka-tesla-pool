@@ -344,7 +344,7 @@ export async function addRideToPool(
 
   if (pool.status !== "OPEN") {
     throw new Error(
-      "Only an open pool can accept rides"
+      "Trip has already started; this pool cannot accept new rides"
     );
   }
 
@@ -576,6 +576,9 @@ export async function updateRideStatus(
           },
         },
       },
+      include: {
+        poolMember: true,
+      },
     });
 
   if (!ride) {
@@ -619,6 +622,17 @@ export async function updateRideStatus(
         },
       });
 
+      if (newStatus === "STARTED") {
+        await tx.pool.update({
+          where: {
+            id: ride.poolMember!.poolId,
+          },
+          data: {
+            status: "IN_PROGRESS",
+          },
+        });
+      }
+
       return updatedRide;
     }
   );
@@ -633,6 +647,17 @@ export async function completePool(
       where: {
         id: poolId,
         driverId,
+      },
+      include: {
+        members: {
+          include: {
+            rideRequest: {
+              select: {
+                status: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -649,6 +674,18 @@ export async function completePool(
   if (pool.status === "CANCELLED") {
     throw new Error(
       "Cancelled pool cannot be completed"
+    );
+  }
+
+  if (
+    pool.members.length === 0 ||
+    pool.members.some(
+      (member) =>
+        member.rideRequest.status !== "COMPLETED"
+    )
+  ) {
+    throw new Error(
+      "All passenger rides must be completed before completing the pool"
     );
   }
 

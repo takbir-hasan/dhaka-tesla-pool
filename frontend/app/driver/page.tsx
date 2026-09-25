@@ -15,6 +15,7 @@ import {
   Pool,
   Vehicle,
   Ride,
+  RideStatus,
 } from "../../types";
 
 type DriverRide = Ride & {
@@ -24,6 +25,31 @@ type DriverRide = Ride & {
     email: string;
   };
 };
+
+function getNextRideAction(status: RideStatus) {
+  if (status === "MATCHED") {
+    return {
+      status: "DRIVER_ARRIVED" as const,
+      label: "Driver Arrived",
+    };
+  }
+
+  if (status === "DRIVER_ARRIVED") {
+    return {
+      status: "STARTED" as const,
+      label: "Start Ride",
+    };
+  }
+
+  if (status === "STARTED") {
+    return {
+      status: "COMPLETED" as const,
+      label: "Complete Ride",
+    };
+  }
+
+  return null;
+}
 
 export default function DriverPage() {
   const router = useRouter();
@@ -44,6 +70,9 @@ export default function DriverPage() {
     useState(4);
 
   const [error, setError] =
+    useState("");
+
+  const [toast, setToast] =
     useState("");
 
   const [loading, setLoading] =
@@ -76,6 +105,18 @@ const [user, setUser] =
     loadDriverData();
   }, []);
 
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setToast("");
+    }, 4000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
+
   async function loadDriverData() {
     setError("");
 
@@ -85,9 +126,17 @@ const [user, setUser] =
         poolsResponse,
         ridesResponse,
       ] = await Promise.all([
-        api.get("/drivers/vehicle"),
-        api.get("/drivers/pools"),
-        api.get("/drivers/rides/requests"),
+        api
+          .get("/driver/vehicle")
+          .catch((error) => {
+            if (error?.response?.status === 404) {
+              return { data: { vehicle: null } };
+            }
+
+            throw error;
+          }),
+        api.get("/driver/pools"),
+        api.get("/driver/rides/requests"),
       ]);
 
       setVehicle(
@@ -124,7 +173,7 @@ const [user, setUser] =
     try {
       const response =
         await api.post(
-          "/drivers/vehicle",
+          "/driver/vehicle",
           {
             name: vehicleName,
             capacity: Number(capacity),
@@ -159,7 +208,7 @@ const [user, setUser] =
     try {
       const response =
         await api.patch(
-          "/drivers/vehicle",
+          "/driver/vehicle",
           {
             name: vehicle.name,
             capacity: vehicle.capacity,
@@ -188,7 +237,7 @@ const [user, setUser] =
     try {
       const response =
         await api.patch(
-          "/drivers/vehicle/status",
+          "/driver/vehicle/status",
           {
             isOnline:
               !vehicle.isOnline,
@@ -219,7 +268,7 @@ const [user, setUser] =
 
     try {
       await api.post(
-        "/drivers/pools",
+        "/driver/pools",
         {
           vehicleId: vehicle.id,
           totalSeats: vehicle.capacity,
@@ -245,11 +294,21 @@ const [user, setUser] =
 
     try {
       await api.post(
-        `/drivers/rides/${rideId}/auto-match`
+        `/driver/rides/${rideId}/auto-match`
       );
 
       await loadDriverData();
     } catch (error: any) {
+      if (
+        error?.response?.data?.message ===
+        "No suitable pool is currently available"
+      ) {
+        setToast(
+          "No suitable pool is currently available"
+        );
+        return;
+      }
+
       setError(
         error?.response?.data?.message ||
           "Unable to match ride"
@@ -268,7 +327,7 @@ const [user, setUser] =
 
     try {
       await api.patch(
-        `/drivers/rides/${rideId}/status`,
+        `/driver/rides/${rideId}/status`,
         {
           status,
         }
@@ -294,7 +353,7 @@ const [user, setUser] =
 
     try {
       await api.post(
-        `/drivers/pools/${poolId}/members`,
+        `/driver/pools/${poolId}/members`,
         {
           rideRequestId: rideId,
         }
@@ -302,6 +361,16 @@ const [user, setUser] =
 
       await loadDriverData();
     } catch (error: any) {
+      if (
+        error?.response?.data?.message ===
+        "Not enough seats available in this pool"
+      ) {
+        setError(
+          "এই pool-এ পর্যাপ্ত জায়গা নেই। কম seat-এর ride বেছে নিন বা অন্য pool ব্যবহার করুন।"
+        );
+        return;
+      }
+
       setError(
         error?.response?.data?.message ||
           "Unable to add ride to pool"
@@ -319,7 +388,7 @@ const [user, setUser] =
 
     try {
       await api.patch(
-        `/drivers/pools/${poolId}/complete`
+        `/driver/pools/${poolId}/complete`
       );
 
       await loadDriverData();
@@ -341,7 +410,7 @@ const [user, setUser] =
 
     try {
       await api.patch(
-        `/drivers/pools/${poolId}/cancel`
+        `/driver/pools/${poolId}/cancel`
       );
 
       await loadDriverData();
@@ -385,6 +454,20 @@ const [user, setUser] =
         </div>
       )}
 
+      {toast && (
+        <div className="toast" role="status">
+          <span>{toast}</span>
+          <button
+            type="button"
+            className="toast-close"
+            onClick={() => setToast("")}
+            aria-label="Close notification"
+          >
+            x
+          </button>
+        </div>
+      )}
+
       {!vehicle ? (
         <section className="card">
           <h2>Create Vehicle</h2>
@@ -403,8 +486,9 @@ const [user, setUser] =
             />
 
             <input
-              type="number"
-              min="1"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={capacity}
               onChange={(event) =>
                 setCapacity(
@@ -444,8 +528,9 @@ const [user, setUser] =
             />
 
             <input
-              type="number"
-              min="1"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={vehicle.capacity}
               onChange={(event) =>
                 setVehicle({
@@ -530,7 +615,7 @@ const [user, setUser] =
                   <div>
                     <strong>
                       {ride.pickupLocation}
-                      {" ? "}
+                      {" -> "}
                       {ride.destination}
                     </strong>
 
@@ -539,7 +624,7 @@ const [user, setUser] =
                     </p>
 
                     <p>
-                      Estimated fare: ?
+                      Estimated fare: ৳
                       {ride.estimatedFare}
                     </p>
 
@@ -582,11 +667,15 @@ const [user, setUser] =
           </p>
         ) : (
           <div className="ride-list">
-            {pools.map((pool) => (
-              <div
-                className="ride-item pool-item"
-                key={pool.id}
-              >
+            {pools.map((pool) => {
+              const availableSeats =
+                pool.totalSeats - pool.occupiedSeats;
+
+              return (
+                <div
+                  className="ride-item pool-item"
+                  key={pool.id}
+                >
                 <div>
                   <strong>
                     Pool
@@ -608,6 +697,44 @@ const [user, setUser] =
                     {pool.vehicle?.name ||
                       "Vehicle"}
                   </span>
+
+                  {pool.members.map((member) => {
+                    const ride = member.rideRequest;
+                    const action = getNextRideAction(
+                      ride.status
+                    );
+
+                    return (
+                      <div
+                        className="pool-member-action"
+                        key={member.id}
+                      >
+                        <span>
+                          {ride.pickupLocation}
+                          {" -> "}
+                          {ride.destination}: {ride.status}
+                        </span>
+
+                        {action && (
+                          <button
+                            onClick={() =>
+                              updateRideStatus(
+                                ride.id,
+                                action.status
+                              )
+                            }
+                            disabled={
+                              busyRideId === ride.id
+                            }
+                          >
+                            {busyRideId === ride.id
+                              ? "Updating..."
+                              : action.label}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="button-column">
@@ -618,7 +745,11 @@ const [user, setUser] =
                         (ride) => (
                           <button
                             key={ride.id}
-                            className="secondary-button"
+                            className={
+                              ride.seats > availableSeats
+                                ? "secondary-button unavailable-button"
+                                : "secondary-button"
+                            }
                             onClick={() =>
                               addRideToPool(
                                 pool.id,
@@ -626,14 +757,13 @@ const [user, setUser] =
                               )
                             }
                             disabled={
-                              busyPoolId ===
-                              pool.id
+                              busyPoolId === pool.id ||
+                              ride.seats > availableSeats
                             }
                           >
-                            Add{" "}
-                            {ride.pickupLocation}
-                            {" ? "}
-                            {ride.destination}
+                            {ride.seats > availableSeats
+                              ? `No space: needs ${ride.seats}, ${availableSeats} available`
+                              : `Add ${ride.pickupLocation} -> ${ride.destination}`}
                           </button>
                         )
                       )}
@@ -645,11 +775,22 @@ const [user, setUser] =
                           )
                         }
                         disabled={
-                          busyPoolId ===
-                          pool.id
+                          busyPoolId === pool.id ||
+                          pool.members.length === 0 ||
+                          pool.members.some(
+                            (member) =>
+                              member.rideRequest.status !==
+                              "COMPLETED"
+                          )
                         }
                       >
-                        Complete Pool
+                        {pool.members.some(
+                          (member) =>
+                            member.rideRequest.status !==
+                            "COMPLETED"
+                        )
+                          ? "Complete all rides first"
+                          : "Complete Pool"}
                       </button>
 
                       <button
@@ -678,16 +819,28 @@ const [user, setUser] =
                         )
                       }
                       disabled={
-                        busyPoolId ===
-                        pool.id
+                          busyPoolId === pool.id ||
+                          pool.members.length === 0 ||
+                          pool.members.some(
+                            (member) =>
+                              member.rideRequest.status !==
+                              "COMPLETED"
+                          )
                       }
                     >
-                      Complete Pool
+                      {pool.members.some(
+                        (member) =>
+                          member.rideRequest.status !==
+                          "COMPLETED"
+                      )
+                        ? "Complete all rides first"
+                        : "Complete Pool"}
                     </button>
                   )}
                 </div>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
