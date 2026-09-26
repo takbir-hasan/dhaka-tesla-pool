@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Dhaka Tesla Pool",
   description: "Smart ride pooling for everyday travel in Dhaka.",
+  icons: {
+    icon: "/tesla-favicon.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
