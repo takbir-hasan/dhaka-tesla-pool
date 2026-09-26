@@ -22,11 +22,28 @@ Urban trips often have spare vehicle capacity but no simple way to share it. Thi
 
 ## Screenshots and Demo
 
-No screenshots, GIFs, public deployment, or demo video are committed yet. Add captured assets under `docs/` and replace the links below when they are available.
+- Live frontend: [dhaka-tesla-pool-eosin.vercel.app](https://dhaka-tesla-pool-eosin.vercel.app/)
+- Live backend API: [dhaka-tesla-pool-s4qe.onrender.com](https://dhaka-tesla-pool-s4qe.onrender.com)
+- API health check: [backend health](https://dhaka-tesla-pool-s4qe.onrender.com/api/health)
+- Demo video: [Watch the demo on Google Drive](https://drive.google.com/file/d/1T5OIWOgz7WMtk1r7q95rpiybktKq3lSf/view?usp=sharing)
 
-- Screenshots/GIFs: `docs/screenshots/` (planned)
-- Demo video: **Not published**
-- Deployment URL: **Not deployed**
+### Application Screenshots
+
+#### Authentication
+
+![Login screen](docs/screenshots/login.png)
+![Registration screen](docs/screenshots/register.png)
+
+#### Passenger Dashboard
+
+![Passenger dashboard with ride request form](docs/screenshots/passenger-dashboard-1.png)
+![Passenger dashboard with fare estimate](docs/screenshots/passenger-dashboard-2.png)
+![Passenger dashboard with ride history](docs/screenshots/passenger-dashboard-3.png)
+
+#### Driver Dashboard
+
+![Driver dashboard vehicle setup](docs/screenshots/driver-dashboard-1.png)
+![Driver dashboard pool management](docs/screenshots/driver-dashboard-2.png)
 
 ## Architecture
 
@@ -307,7 +324,7 @@ No `npm test` command is configured yet. Until the behavioral suite described ab
 
 ## Known Limitations
 
-- No production deployment, screenshots, GIFs, or demo video are published.
+- A live deployment, screenshots, and demo video are available, but the deployment is not yet production-hardened with full monitoring, backups, and operational runbooks.
 - No automated test runner or behavioral test suite is currently configured.
 - Manual pool matching does not yet make the capacity check and occupancy increment one database-level conditional operation.
 - Automatic matching also lacks a row lock or conditional capacity update, so concurrent claims can still over-allocate a pool.
@@ -320,10 +337,15 @@ No `npm test` command is configured yet. Until the behavioral suite described ab
 ## Next Improvements
 
 1. Add the behavioral and concurrent integration tests listed above.
-2. Make manual pool matching capacity-safe with a row lock or conditional update and add idempotency handling.
-3. Move route estimates to a routing service and replace demo fare arithmetic with currency-safe persistence.
-4. Add CI for lint, build, migrations, seed, and integration tests.
-5. Add production deployment, screenshots, a short demo video, monitoring, rate limiting, and secure session management.
+2. Make both manual and automatic pool matching capacity-safe with a row lock or conditional update, conflict responses, and idempotency handling.
+3. Add database `CHECK` constraints for positive capacities/seats, `occupiedSeats <= totalSeats`, and valid fare values; change fare persistence to `Decimal(10, 2)` or integer minor currency units.
+4. Move route estimates to a routing service with cached results, route expiry, and a fallback strategy.
+5. Add CI for lint, build, migrations, seed, and the behavioral/concurrent integration tests.
+6. Harden authentication with HTTP-only secure cookies or refresh-token rotation, token revocation, password policy, rate limiting, and stricter CORS/security headers.
+7. Add structured logging, request IDs, error tracking, readiness checks, database health checks, metrics, backups, and restore documentation for the deployed services.
+8. Add payment, notification, and real-time driver-location integrations behind clear service boundaries.
+9. Improve frontend accessibility, loading/error/empty states, responsive testing, and API contract documentation with an OpenAPI specification.
+10. Add deployment environments with secret management, database migration safeguards, rollback procedures, and operational runbooks.
 
 ## AI Usage
 
